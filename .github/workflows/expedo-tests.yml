@@ -159,12 +159,15 @@ jobs:
         run: |
           set -e
           IFS=, read -r ID_A ID_B < /tmp/expedo-product-ids.txt
-          RESPONSE="$(curl -fsS -X POST \
+          HTTP_STATUS="$(curl -sS -o /tmp/expedo-valid-ajax.json -w '%{http_code}' -X POST \
             --data-urlencode 'action=expedo_compare_data' \
             --data-urlencode "ids[]=$ID_A" \
             --data-urlencode "ids[]=$ID_B" \
             http://127.0.0.1:8080/wp-admin/admin-ajax.php)"
-          printf '%s' "$RESPONSE" | php -r '
+          echo "Valid AJAX HTTP status: $HTTP_STATUS"
+          cat /tmp/expedo-valid-ajax.json
+          test "$HTTP_STATUS" = "200"
+          cat /tmp/expedo-valid-ajax.json | php -r '
             $data = json_decode(stream_get_contents(STDIN), true);
             if (!is_array($data) || empty($data["success"]) || count($data["data"] ?? []) !== 2) {
               fwrite(STDERR, "Unexpected HTTP AJAX response.\\n");
