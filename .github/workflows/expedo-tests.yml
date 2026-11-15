@@ -1,0 +1,115 @@
+name: EXPEDO v1.21 tests
+
+on:
+  push:
+    branches:
+      - main
+      - "test/**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  wordpress-woocommerce-comparison:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: mysqli, curl, mbstring, zip, xml
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: PHP syntax check
+        run: |
+          find . -path ./.git -prune -o -name '*.php' -type f -print0 | xargs -0 -n1 php -l
+
+      - name: JavaScript syntax check
+        run: node --check assets/js/theme.js
+
+      - name: Install WordPress and WooCommerce
+        env:
+          DB_HOST: 127.0.0.1:3306
+        run: |
+          set -e
+          curl -sSLo wp-cli.phar https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+          chmod +x wp-cli.phar
+          php wp-cli.phar core download --path=wp --allow-root
+          php wp-cli.phar config create --path=wp --dbname=wordpress --dbuser=root --dbpass=root --dbhost="$DB_HOST" --allow-root
+          php wp-cli.phar core install --path=wp --url=http://127.0.0.1:8080 --title="EXPEDO Test" --admin_user=admin --admin_password=testing123 --admin_email=test@example.com --skip-email --allow-root
+          mkdir -p wp/wp-content/themes/expedo
+          tar --exclude='./.git' --exclude='./wp' --exclude='./wp-cli.phar' -cf - . | tar -xf - -C wp/wp-content/themes/expedo
+          php wp-cli.phar plugin install woocommerce --activate --path=wp --allow-root
+          php wp-cli.phar theme activate expedo --path=wp --allow-root
+          php wp-cli.phar rewrite structure '/%postname%/' --path=wp --allow-root
+          php wp-cli.phar rewrite flush --path=wp --allow-root
+
+      - name: Create comparison fixtures
+        run: |
+          php wp-cli.phar eval '
+          $page = get_page_by_path("compara-produse");
+          if (!$page) {
+            wp_insert_post(["post_type"=>"page","post_status"=>"publish","post_title"=>"Compară produse","post_name"=>"compara-produse"]);
+          }
+          foreach (["Produs Test A","Produs Test B"] as $name) {
+            $p = new WC_Product_Simple();
+            $p->set_name($name);
+            $p->set_status("publish");
+            $p->set_regular_price("100");
+            $p->set_catalog_visibility("visible");
+            $p->save();
+          }
+          ' --path=wp --allow-root
+
+      - name: Start WordPress server
+        run: |
+          php -S 127.0.0.1:8080 -t wp > /tmp/expedo-wp.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/expedo-wp.log
+          exit 1
+
+      - name: Test comparison AJAX endpoint
+        run: |
+          set -e
+          PAGE="$(curl -fsS http://127.0.0.1:8080/compara-produse/)"
+          NONCE="$(printf '%s' "$PAGE" | grep -oE '"nonce":"[a-f0-9]+"' | head -1 | cut -d '"' -f4)"
+          if [ -z "$NONCE" ]; then
+            echo "Comparison nonce was not found in the rendered page."
+            exit 1
+          fi
+          IDS="$(php wp-cli.phar post list --post_type=product --format=ids --path=wp --allow-root | tr ' ' ',')"
+          FIRST="$(echo "$IDS" | cut -d ',' -f1)"
+          SECOND="$(echo "$IDS" | cut -d ',' -f2)"
+          RESPONSE="$(curl -fsS -X POST http://127.0.0.1:8080/wp-admin/admin-ajax.php \
+            --data-urlencode action=expedo_compare_data \
+            --data-urlencode "nonce=$NONCE" \
+            --data-urlencode "ids[]=$FIRST" \
+            --data-urlencode "ids[]=$SECOND")"
+          echo "$RESPONSE"
+          echo "$RESPONSE" | grep -q '"success":true'
+          echo "$RESPONSE" | grep -q 'Produs Test A'
+          echo "$RESPONSE" | grep -q 'Produs Test B'
