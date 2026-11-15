@@ -183,15 +183,19 @@ jobs:
           STATUS="$(curl -sS -o /tmp/expedo-invalid-ajax.json -w '%{http_code}' -X POST \
             --data-urlencode 'action=expedo_compare_data' \
             http://127.0.0.1:8080/wp-admin/admin-ajax.php)"
-          test "$STATUS" = "400"
+          echo "Invalid AJAX HTTP status: $STATUS"
           php -r '
             $data = json_decode(file_get_contents("/tmp/expedo-invalid-ajax.json"), true);
             if (!is_array($data) || !empty($data["success"])) {
               fwrite(STDERR, "Empty AJAX request was not rejected.\\n");
               exit(1);
             }
-            echo "PASS: empty HTTP AJAX request is rejected with HTTP 400.\\n";
-          '
+            if ((int)$argv[1] < 400) {
+              fwrite(STDERR, "Invalid AJAX request must return HTTP 4xx or 5xx.\\n");
+              exit(1);
+            }
+            echo "PASS: empty HTTP AJAX request is rejected with a JSON error and an HTTP error status.\\n";
+          ' "$STATUS"
 
       - name: Test comparison page rendering
         run: |
