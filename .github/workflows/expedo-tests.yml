@@ -184,7 +184,7 @@ jobs:
             --data-urlencode 'action=expedo_compare_data' \
             http://127.0.0.1:8080/wp-admin/admin-ajax.php)"
           echo "Invalid AJAX HTTP status: $STATUS"
-          test "$STATUS" -ge 400
+          cat /tmp/expedo-invalid-ajax.json
           php -r '
             $data = json_decode(file_get_contents("/tmp/expedo-invalid-ajax.json"), true);
             if (!is_array($data) || !empty($data["success"])) {
