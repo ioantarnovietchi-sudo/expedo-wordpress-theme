@@ -235,7 +235,7 @@ jobs:
 
       - name: Upload theme ZIP
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: expedo-theme-v1.21-comparison
           path: dist/expedo-theme-v1.21-comparison.zip
