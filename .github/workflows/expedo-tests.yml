@@ -130,7 +130,7 @@ jobs:
           PHP
           php wp-cli.phar eval-file /tmp/test-comparison.php --path=wp --allow-root
 
-      - name: Start WordPress test server
+      - name: Start WordPress server and test comparison over HTTP
         run: |
           cat > /tmp/expedo-wp-router.php <<'PHP'
           <?php
@@ -143,20 +143,21 @@ jobs:
           require $root . '/index.php';
           PHP
           EXPEDO_WP_ROOT="$GITHUB_WORKSPACE/wp" php -S 127.0.0.1:8080 -t "$GITHUB_WORKSPACE/wp" /tmp/expedo-wp-router.php > /tmp/expedo-php-server.log 2>&1 &
-          echo $! > /tmp/expedo-php-server.pid
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/ > /dev/null; then
               echo "PASS: WordPress test server is responding."
-              exit 0
+              break
             fi
             sleep 1
           done
-          cat /tmp/expedo-php-server.log
-          echo "WordPress test server did not start." >&2
-          exit 1
+          if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            cat /tmp/expedo-php-server.log
+            echo "::error::WordPress test server stopped before HTTP checks."
+            exit 1
+          fi
 
-      - name: Test comparison AJAX over HTTP
-        run: |
           set -e
           IFS=, read -r ID_A ID_B < /tmp/expedo-product-ids.txt
           HTTP_STATUS="$(curl -sS -o /tmp/expedo-valid-ajax.json -w '%{http_code}' -X POST \
@@ -170,7 +171,7 @@ jobs:
             cat /tmp/expedo-php-server.log
             exit 1
           fi
-          if ! php -r '
+          php -r '
             $raw = file_get_contents("/tmp/expedo-valid-ajax.json");
             $data = json_decode($raw, true);
             if (!is_array($data) || empty($data["success"]) || count($data["data"] ?? []) !== 2) {
@@ -180,32 +181,22 @@ jobs:
             if (!in_array("Produs Test A", $names, true) || !in_array("Produs Test B", $names, true)) {
               fwrite(STDERR, "Unexpected products: " . implode(", ", $names) . "\\n"); exit(1);
             }
-          '; then
-            BODY="$(cat /tmp/expedo-valid-ajax.json)"
-            echo "::error::Valid AJAX response validation failed: $BODY"
-            exit 1
-          fi
+          '
           echo "PASS: valid HTTP AJAX request returns both products."
 
           STATUS="$(curl -sS -o /tmp/expedo-invalid-ajax.json -w '%{http_code}' -X POST \
             --data-urlencode 'action=expedo_compare_data' \
             http://127.0.0.1:8080/wp-admin/admin-ajax.php)"
-          if ! php -r '
+          php -r '
             $raw = file_get_contents("/tmp/expedo-invalid-ajax.json");
             $data = json_decode($raw, true);
             if (!is_array($data) || !empty($data["success"])) {
               fwrite(STDERR, "Empty AJAX request was not rejected. HTTP " . $argv[1] . "; body: " . $raw . "\\n");
               exit(1);
             }
-          ' "$STATUS"; then
-            BODY="$(cat /tmp/expedo-invalid-ajax.json)"
-            echo "::error::Invalid AJAX response validation failed. HTTP $STATUS; body: $BODY"
-            exit 1
-          fi
+          ' "$STATUS"
           echo "PASS: empty HTTP AJAX request is rejected with a JSON error (HTTP $STATUS)."
 
-      - name: Test comparison page rendering
-        run: |
           PAGE="$(curl -fsS http://127.0.0.1:8080/compara-produse/)"
           echo "$PAGE" | grep -q 'expedo-compare-results'
           echo "PASS: pagina de comparație conține containerul necesar."
