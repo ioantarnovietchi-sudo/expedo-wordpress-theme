@@ -164,8 +164,27 @@ jobs:
       - name: Package theme ZIP
         if: success()
         run: |
-          mkdir -p dist
-          zip -r dist/expedo-theme-v1.21-comparison.zip . -x '.git/*' 'wp/*' 'wp-cli.phar' 'dist/*' '.github/*' '*.zip'
+          set -e
+          mkdir -p dist package
+          while IFS= read -r -d '' file; do
+            case "$file" in
+              *.zip|.github/*) continue ;;
+            esac
+            mkdir -p "package/$(dirname "$file")"
+            cp "$file" "package/$file"
+          done < <(git ls-files -z)
+          test -f package/style.css
+          test -f package/functions.php
+          test -f package/assets/js/theme.js
+          (cd package && zip -qr "$GITHUB_WORKSPACE/dist/expedo-theme-v1.21-comparison.zip" .)
+          unzip -t dist/expedo-theme-v1.21-comparison.zip
+          unzip -Z1 dist/expedo-theme-v1.21-comparison.zip | grep -q '^style.css$'
+          unzip -Z1 dist/expedo-theme-v1.21-comparison.zip | grep -q '^functions.php$'
+          unzip -Z1 dist/expedo-theme-v1.21-comparison.zip | grep -q '^assets/js/theme.js$'
+          if unzip -Z1 dist/expedo-theme-v1.21-comparison.zip | grep -Eq '(^|/)[^/]+\.zip$'; then
+            echo "Nested ZIP file found in theme package." >&2
+            exit 1
+          fi
 
       - name: Upload theme ZIP
         if: success()
