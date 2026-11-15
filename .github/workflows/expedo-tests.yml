@@ -142,7 +142,7 @@ jobs:
           }
           require $root . '/index.php';
           PHP
-          EXPEDO_WP_ROOT="$GITHUB_WORKSPACE/wp" php -S 127.0.0.1:8080 -t "$GITHUB_WORKSPACE/wp" /tmp/expedo-wp-router.php > /tmp/expedo-php-server.log 2>&1 &
+          nohup env EXPEDO_WP_ROOT="$GITHUB_WORKSPACE/wp" php -S 127.0.0.1:8080 -t "$GITHUB_WORKSPACE/wp" /tmp/expedo-wp-router.php > /tmp/expedo-php-server.log 2>&1 < /dev/null &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 30); do
@@ -158,13 +158,16 @@ jobs:
             exit 1
           fi
 
-          set -e
           IFS=, read -r ID_A ID_B < /tmp/expedo-product-ids.txt
-          HTTP_STATUS="$(curl -sS -o /tmp/expedo-valid-ajax.json -w '%{http_code}' -X POST \
+          set +e
+          HTTP_STATUS="$(curl --retry 5 --retry-connrefused --retry-delay 1 -sS -o /tmp/expedo-valid-ajax.json -w '%{http_code}' -X POST \
             --data-urlencode 'action=expedo_compare_data' \
             --data-urlencode "ids[]=$ID_A" \
             --data-urlencode "ids[]=$ID_B" \
             http://127.0.0.1:8080/wp-admin/admin-ajax.php)"
+          CURL_EXIT=$?
+          echo "Valid AJAX curl exit: $CURL_EXIT; HTTP status: $HTTP_STATUS"
+          if [ "$CURL_EXIT" -ne 0 ]; then cat /tmp/expedo-php-server.log; echo "::error::Valid AJAX curl failed."; exit 1; fi
           if [ "$HTTP_STATUS" != "200" ]; then
             BODY="$(cat /tmp/expedo-valid-ajax.json)"
             echo "::error::Valid AJAX request returned HTTP $HTTP_STATUS: $BODY"
@@ -184,9 +187,13 @@ jobs:
           '
           echo "PASS: valid HTTP AJAX request returns both products."
 
-          STATUS="$(curl -sS -o /tmp/expedo-invalid-ajax.json -w '%{http_code}' -X POST \
+          STATUS="$(curl --retry 5 --retry-connrefused --retry-delay 1 -sS -o /tmp/expedo-invalid-ajax.json -w '%{http_code}' -X POST \
             --data-urlencode 'action=expedo_compare_data' \
             http://127.0.0.1:8080/wp-admin/admin-ajax.php)"
+          CURL_EXIT=$?
+          echo "Invalid AJAX curl exit: $CURL_EXIT; HTTP status: $STATUS"
+          if [ "$CURL_EXIT" -ne 0 ]; then cat /tmp/expedo-php-server.log; echo "::error::Invalid AJAX curl failed."; exit 1; fi
+          set -e
           php -r '
             $raw = file_get_contents("/tmp/expedo-invalid-ajax.json");
             $data = json_decode($raw, true);
