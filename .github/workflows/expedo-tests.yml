@@ -105,12 +105,21 @@ jobs:
         run: |
           set -e
           IFS=',' read -r FIRST SECOND < /tmp/expedo-product-ids.txt
-          RESPONSE="$(curl -fsS -X POST http://127.0.0.1:8080/wp-admin/admin-ajax.php \
+          echo "Fixture product IDs: $FIRST,$SECOND"
+          php wp-cli.phar eval 'foreach ([$argv[0],$argv[1]] as $id) { $p=wc_get_product((int)$id); echo "Product ".$id.": ".($p ? $p->get_name()." / status=".$p->get_status()." / visibility=".$p->get_catalog_visibility()." / visible=".($p->is_visible()?"yes":"no") : "NOT FOUND").PHP_EOL; }' "$FIRST" "$SECOND" --path=wp --allow-root
+          HTTP_CODE="$(curl -sS -o /tmp/expedo-ajax-response.txt -w '%{http_code}' -X POST http://127.0.0.1:8080/wp-admin/admin-ajax.php \
             --data-urlencode action=expedo_compare_data \
             --data-urlencode "ids[]=$FIRST" \
             --data-urlencode "ids[]=$SECOND")"
-          echo "$RESPONSE"
-          node -e 'const r=JSON.parse(process.argv[1]); if(!r.success || !Array.isArray(r.data) || r.data.length!==2) process.exit(1); const names=r.data.map(p=>p.name); if(!names.includes("Produs Test A") || !names.includes("Produs Test B")) process.exit(1); console.log("PASS: 2 produse returnate corect fără nonce.")' "$RESPONSE"
+          RESPONSE="$(cat /tmp/expedo-ajax-response.txt)"
+          echo "AJAX HTTP status: $HTTP_CODE"
+          echo "AJAX response body: $RESPONSE"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "WordPress server log:"
+            cat /tmp/expedo-wp.log
+            exit 1
+          fi
+          node -e 'const raw=process.argv[1]; let r; try { r=JSON.parse(raw); } catch(e) { console.error("AJAX did not return JSON"); process.exit(1); } if(!r.success || !Array.isArray(r.data) || r.data.length!==2) { console.error("Unexpected AJAX payload:",r); process.exit(1); } const names=r.data.map(p=>p.name); if(!names.includes("Produs Test A") || !names.includes("Produs Test B")) { console.error("Unexpected product names:",names); process.exit(1); } console.log("PASS: 2 produse returnate corect fără nonce.")' "$RESPONSE"
 
       - name: Test comparison page rendering
         run: |
