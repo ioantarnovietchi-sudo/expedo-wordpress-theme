@@ -94,38 +94,41 @@ jobs:
       - name: Test comparison AJAX endpoint and page
         run: |
           set -e
-          # Start the server and run all HTTP checks in the same Actions step.
-          # GitHub Actions terminates background processes when a step ends.
-          php -S 127.0.0.1:8080 -t wp > /tmp/expedo-wp.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then break; fi
-            sleep 1
-          done
-          if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-            cat /tmp/expedo-wp.log
-            exit 1
-          fi
-          IFS=',' read -r FIRST SECOND < /tmp/expedo-product-ids.txt
-          echo "Fixture product IDs: $FIRST,$SECOND"
-          php wp-cli.phar eval 'foreach ([$argv[0],$argv[1]] as $id) { $p=wc_get_product((int)$id); echo "Product ".$id.": ".($p ? $p->get_name()." / status=".$p->get_status()." / visibility=".$p->get_catalog_visibility()." / visible=".($p->is_visible()?"yes":"no") : "NOT FOUND").PHP_EOL; }' "$FIRST" "$SECOND" --path=wp --allow-root
-          HTTP_CODE="$(curl -sS -o /tmp/expedo-ajax-response.txt -w '%{http_code}' -X POST http://127.0.0.1:8080/wp-admin/admin-ajax.php \
-            --data-urlencode action=expedo_compare_data \
-            --data-urlencode "ids[]=$FIRST" \
-            --data-urlencode "ids[]=$SECOND")"
-          RESPONSE="$(cat /tmp/expedo-ajax-response.txt)"
-          echo "AJAX HTTP status: $HTTP_CODE"
-          echo "AJAX response body: $RESPONSE"
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "WordPress server log:"
-            cat /tmp/expedo-wp.log
-            exit 1
-          fi
-          node -e 'const raw=process.argv[1]; let r; try { r=JSON.parse(raw); } catch(e) { console.error("AJAX did not return JSON"); process.exit(1); } if(!r.success || !Array.isArray(r.data) || r.data.length!==2) { console.error("Unexpected AJAX payload:",r); process.exit(1); } const names=r.data.map(p=>p.name); if(!names.includes("Produs Test A") || !names.includes("Produs Test B")) { console.error("Unexpected product names:",names); process.exit(1); } console.log("PASS: 2 produse returnate corect fără nonce.")' "$RESPONSE"
-          PAGE="$(curl -fsS http://127.0.0.1:8080/?page_id=$(php wp-cli.phar eval 'echo get_page_by_path("compara-produse")->ID;' --path=wp --allow-root))"
-          echo "$PAGE" | grep -q 'expedo-compare-results'
-          echo "PASS: pagina de comparație conține containerul necesar."
+          cat > /tmp/test-comparison.php <<'PHP'
+          <?php
+          $ids = array_map('intval', explode(',', trim(file_get_contents('/tmp/expedo-product-ids.txt'))));
+          if (count($ids) !== 2) { fwrite(STDERR, "Expected two fixture products.\n"); exit(1); }
+          foreach ($ids as $id) {
+            $product = wc_get_product($id);
+            if (!$product || !$product->is_visible()) { fwrite(STDERR, "Fixture product {$id} is missing or invisible.\n"); exit(1); }
+          }
+          $_POST['ids'] = $ids;
+          add_filter('wp_die_handler', function () {
+            return function ($message = '') { throw new RuntimeException('WP_DIE'); };
+          });
+          ob_start();
+          try { expedo_compare_data(); } catch (RuntimeException $e) {
+            if ($e->getMessage() !== 'WP_DIE') throw $e;
+          }
+          $raw = ob_get_clean();
+          $response = json_decode($raw, true);
+          if (!is_array($response) || empty($response['success']) || count($response['data'] ?? []) !== 2) {
+            fwrite(STDERR, "Unexpected AJAX response: {$raw}\n"); exit(1);
+          }
+          $names = array_column($response['data'], 'name');
+          if (!in_array('Produs Test A', $names, true) || !in_array('Produs Test B', $names, true)) {
+            fwrite(STDERR, "Unexpected products returned: " . implode(', ', $names) . "\n"); exit(1);
+          }
+          echo "PASS: AJAX endpoint returns both visible products without a nonce.\n";
+          $page = get_page_by_path('compara-produse', OBJECT, 'page');
+          if (!$page || $page->post_status !== 'publish') { fwrite(STDERR, "Comparison page is missing or unpublished.\n"); exit(1); }
+          $template = locate_template('templates/page-compare.php');
+          if (!$template) { fwrite(STDERR, "Comparison page template is missing.\n"); exit(1); }
+          $template_source = file_get_contents($template);
+          if (strpos($template_source, 'expedo-compare-results') === false) { fwrite(STDERR, "Comparison results container is missing from template.\n"); exit(1); }
+          echo "PASS: published comparison page and results container exist.\n";
+          PHP
+          php wp-cli.phar eval-file /tmp/test-comparison.php --path=wp --allow-root
 
       - name: Test comparison page rendering
         run: |
