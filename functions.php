@@ -63,7 +63,7 @@ function expedo_assets(){
  $js_version=file_exists($js_file)?(string)filemtime($js_file):wp_get_theme()->get('Version');
  wp_enqueue_style('expedo-style',get_stylesheet_uri(),[],$css_version);
  wp_enqueue_script('expedo-script',get_template_directory_uri().'/assets/js/theme.js',[],$js_version,true);
- wp_localize_script('expedo-script','expedoData',['compareUrl'=>home_url('/compara-produse/'),'ajaxUrl'=>admin_url('admin-ajax.php'),'nonce'=>wp_create_nonce('expedo_compare')]);
+ wp_localize_script('expedo-script','expedoData',['compareUrl'=>home_url('/compara-produse/'),'ajaxUrl'=>admin_url('admin-ajax.php')]);
 }
 add_action('wp_enqueue_scripts','expedo_assets');
 
@@ -176,10 +176,8 @@ add_action('save_post_product','expedo_product_trust_save');
 
 /* Front-end product comparison uses localStorage; this endpoint supplies validated product data. */
 function expedo_compare_data(){
- // Public, read-only endpoint. Validate the request nonce while allowing guest visitors.
- if(!check_ajax_referer('expedo_compare','nonce',false)){
-  wp_send_json_error(['message'=>'Sesiunea comparației a expirat. Reîncarcă pagina și încearcă din nou.'],403);
- }
+ // Public, read-only endpoint: no nonce is required because no data is changed.
+ // Product IDs are sanitized, limited to four, and only published/visible products are returned.
  if(!function_exists('wc_get_product')){
   wp_send_json_error(['message'=>'WooCommerce nu este disponibil momentan.'],503);
  }
