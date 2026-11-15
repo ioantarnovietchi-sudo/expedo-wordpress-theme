@@ -120,6 +120,19 @@ jobs:
             fwrite(STDERR, "Unexpected products returned: " . implode(', ', $names) . "\n"); exit(1);
           }
           echo "PASS: AJAX endpoint returns both visible products without a nonce.\n";
+          $_POST = [];
+          http_response_code(200);
+          ob_start();
+          try { expedo_compare_data(); } catch (RuntimeException $e) {
+            if ($e->getMessage() !== 'WP_DIE') throw $e;
+          }
+          $invalid_raw = ob_get_clean();
+          $invalid_response = json_decode($invalid_raw, true);
+          if (!is_array($invalid_response) || !empty($invalid_response['success']) || http_response_code() !== 400) {
+            fwrite(STDERR, "Invalid AJAX request was not rejected correctly. HTTP " . http_response_code() . "; body: {$invalid_raw}\\n");
+            exit(1);
+          }
+          echo "PASS: AJAX endpoint rejects an empty product list with HTTP 400.\\n";
           $page = get_page_by_path('compara-produse', OBJECT, 'page');
           if (!$page || $page->post_status !== 'publish') { fwrite(STDERR, "Comparison page is missing or unpublished.\n"); exit(1); }
           $template = locate_template('templates/page-compare.php');
@@ -187,22 +200,7 @@ jobs:
           '
           echo "PASS: valid HTTP AJAX request returns both products."
 
-          STATUS="$(curl --retry 5 --retry-connrefused --retry-delay 1 -sS -o /tmp/expedo-invalid-ajax.json -w '%{http_code}' -X POST \
-            --data-urlencode 'action=expedo_compare_data' \
-            http://127.0.0.1:8080/wp-admin/admin-ajax.php)"
-          CURL_EXIT=$?
-          echo "Invalid AJAX curl exit: $CURL_EXIT; HTTP status: $STATUS"
-          if [ "$CURL_EXIT" -ne 0 ]; then cat /tmp/expedo-php-server.log; echo "::error::Invalid AJAX curl failed."; exit 1; fi
-          set -e
-          php -r '
-            $raw = file_get_contents("/tmp/expedo-invalid-ajax.json");
-            $data = json_decode($raw, true);
-            if (!is_array($data) || !empty($data["success"])) {
-              fwrite(STDERR, "Empty AJAX request was not rejected. HTTP " . $argv[1] . "; body: " . $raw . "\\n");
-              exit(1);
-            }
-          ' "$STATUS"
-          echo "PASS: empty HTTP AJAX request is rejected with a JSON error (HTTP $STATUS)."
+          echo "PASS: valid HTTP AJAX request returns both products."
 
           PAGE="$(curl -fsS http://127.0.0.1:8080/compara-produse/)"
           echo "$PAGE" | grep -q 'expedo-compare-results'
