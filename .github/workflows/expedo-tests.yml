@@ -130,11 +130,42 @@ jobs:
           PHP
           php wp-cli.phar eval-file /tmp/test-comparison.php --path=wp --allow-root
 
+      - name: Start WordPress test server
+        run: |
+          cat > /tmp/expedo-wp-router.php <<'PHP'
+          <?php
+          $root = getenv('EXPEDO_WP_ROOT');
+          $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+          $file = realpath($root . $path);
+          if ($path !== '/' && $file && str_starts_with($file, realpath($root)) && is_file($file)) {
+            return false;
+          }
+          require $root . '/index.php';
+          PHP
+          EXPEDO_WP_ROOT="$GITHUB_WORKSPACE/wp" php -S 127.0.0.1:8080 -t "$GITHUB_WORKSPACE/wp" /tmp/expedo-wp-router.php > /tmp/expedo-php-server.log 2>&1 &
+          echo $! > /tmp/expedo-php-server.pid
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/ > /dev/null; then
+              echo "PASS: WordPress test server is responding."
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/expedo-php-server.log
+          echo "WordPress test server did not start." >&2
+          exit 1
+
+      - name: Test comparison page rendering
+        run: |
+          PAGE="$(curl -fsS http://127.0.0.1:8080/compara-produse/)"
+          echo "$PAGE" | grep -q 'expedo-compare-results'
+          echo "PASS: pagina de comparație conține containerul necesar."
+
       - name: Package theme ZIP
         if: success()
         run: |
           mkdir -p dist
-          zip -r dist/expedo-theme-v1.21-comparison.zip . -x '.git/*' 'wp/*' 'wp-cli.phar' 'dist/*' '.github/*'
+          zip -r dist/expedo-theme-v1.21-comparison.zip . -x '.git/*' 'wp/*' 'wp-cli.phar' 'dist/*' '.github/*' '*.zip'
 
       - name: Upload theme ZIP
         if: success()
@@ -143,9 +174,3 @@ jobs:
           name: expedo-theme-v1.21-comparison
           path: dist/expedo-theme-v1.21-comparison.zip
           if-no-files-found: error
-
-      - name: Test comparison page rendering
-        run: |
-          PAGE="$(curl -fsS http://127.0.0.1:8080/compara-produse/)"
-          echo "$PAGE" | grep -q 'expedo-compare-results'
-          echo "PASS: pagina de comparație conține containerul necesar."
