@@ -188,10 +188,11 @@ function expedo_compare_data(){
  foreach($ids as $id){
   $p=wc_get_product($id);if(!$p||'publish'!==get_post_status($id)||!$p->is_visible())continue;
   $dimensions=[];
-  foreach(['Lățime'=>'width','Înălțime'=>'height','Adâncime'=>'depth'] as $label=>$key){
-   $value=get_post_meta($id,'_expedo_'.$key.'_cm',true);
-   if($value==='' && $p->{"get_".$key}()){
-    $value=wc_get_dimension($p->{"get_".$key}(),'cm');
+  foreach(['Lățime'=>['meta'=>'width','method'=>'width'],'Înălțime'=>['meta'=>'height','method'=>'height'],'Adâncime'=>['meta'=>'depth','method'=>'length']] as $label=>$dimension){
+   $value=get_post_meta($id,'_expedo_'.$dimension['meta'].'_cm',true);
+   $method='get_'.$dimension['method'];
+   if($value==='' && method_exists($p,$method) && $p->{$method}()){
+    $value=wc_get_dimension($p->{$method}(),'cm');
    }
    $dimensions[$label]=$value;
   }
