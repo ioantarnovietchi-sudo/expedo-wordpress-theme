@@ -164,35 +164,45 @@ jobs:
             --data-urlencode "ids[]=$ID_A" \
             --data-urlencode "ids[]=$ID_B" \
             http://127.0.0.1:8080/wp-admin/admin-ajax.php)"
-          echo "Valid AJAX HTTP status: $HTTP_STATUS"
-          cat /tmp/expedo-valid-ajax.json
-          test "$HTTP_STATUS" = "200"
-          cat /tmp/expedo-valid-ajax.json | php -r '
-            $data = json_decode(stream_get_contents(STDIN), true);
+          if [ "$HTTP_STATUS" != "200" ]; then
+            BODY="$(cat /tmp/expedo-valid-ajax.json)"
+            echo "::error::Valid AJAX request returned HTTP $HTTP_STATUS: $BODY"
+            cat /tmp/expedo-php-server.log
+            exit 1
+          fi
+          if ! php -r '
+            $raw = file_get_contents("/tmp/expedo-valid-ajax.json");
+            $data = json_decode($raw, true);
             if (!is_array($data) || empty($data["success"]) || count($data["data"] ?? []) !== 2) {
-              fwrite(STDERR, "Unexpected HTTP AJAX response.\\n");
-              exit(1);
+              fwrite(STDERR, "Unexpected valid AJAX JSON: " . $raw . "\\n"); exit(1);
             }
             $names = array_column($data["data"], "name");
             if (!in_array("Produs Test A", $names, true) || !in_array("Produs Test B", $names, true)) {
-              fwrite(STDERR, "HTTP AJAX response contains unexpected products.\\n");
-              exit(1);
+              fwrite(STDERR, "Unexpected products: " . implode(", ", $names) . "\\n"); exit(1);
             }
-            echo "PASS: real HTTP AJAX request returns both products.\\n";
-          '
+          '; then
+            BODY="$(cat /tmp/expedo-valid-ajax.json)"
+            echo "::error::Valid AJAX response validation failed: $BODY"
+            exit 1
+          fi
+          echo "PASS: valid HTTP AJAX request returns both products."
+
           STATUS="$(curl -sS -o /tmp/expedo-invalid-ajax.json -w '%{http_code}' -X POST \
             --data-urlencode 'action=expedo_compare_data' \
             http://127.0.0.1:8080/wp-admin/admin-ajax.php)"
-          php -r '
-            $body = file_get_contents("/tmp/expedo-invalid-ajax.json");
-            echo "::error::Invalid AJAX diagnostic: HTTP " . $argv[1] . "; body=" . str_replace(["\\r", "\\n"], " ", $body) . "\\n";
-            $data = json_decode($body, true);
+          if ! php -r '
+            $raw = file_get_contents("/tmp/expedo-invalid-ajax.json");
+            $data = json_decode($raw, true);
             if (!is_array($data) || !empty($data["success"])) {
-              fwrite(STDERR, "Empty AJAX request was not rejected.\\n");
+              fwrite(STDERR, "Empty AJAX request was not rejected. HTTP " . $argv[1] . "; body: " . $raw . "\\n");
               exit(1);
             }
-            echo "PASS: empty HTTP AJAX request is rejected with a JSON error and an HTTP error status.\\n";
-          '
+          ' "$STATUS"; then
+            BODY="$(cat /tmp/expedo-invalid-ajax.json)"
+            echo "::error::Invalid AJAX response validation failed. HTTP $STATUS; body: $BODY"
+            exit 1
+          fi
+          echo "PASS: empty HTTP AJAX request is rejected with a JSON error (HTTP $STATUS)."
 
       - name: Test comparison page rendering
         run: |
