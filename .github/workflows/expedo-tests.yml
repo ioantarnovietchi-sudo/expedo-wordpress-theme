@@ -130,6 +130,20 @@ jobs:
           PHP
           php wp-cli.phar eval-file /tmp/test-comparison.php --path=wp --allow-root
 
+      - name: Package theme ZIP
+        if: success()
+        run: |
+          mkdir -p dist
+          zip -r dist/expedo-theme-v1.21-comparison.zip . -x '.git/*' 'wp/*' 'wp-cli.phar' 'dist/*' '.github/*'
+
+      - name: Upload theme ZIP
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: expedo-theme-v1.21-comparison
+          path: dist/expedo-theme-v1.21-comparison.zip
+          if-no-files-found: error
+
       - name: Test comparison page rendering
         run: |
           PAGE="$(curl -fsS http://127.0.0.1:8080/compara-produse/)"
