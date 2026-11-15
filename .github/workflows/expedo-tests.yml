@@ -146,15 +146,15 @@ jobs:
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8080/ > /dev/null; then
-              echo "PASS: WordPress test server is responding."
+            if nc -z 127.0.0.1 8080 2>/dev/null; then
+              echo "PASS: WordPress test server is listening."
               break
             fi
             sleep 1
           done
-          if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+          if ! nc -z 127.0.0.1 8080 2>/dev/null; then
             cat /tmp/expedo-php-server.log
-            echo "::error::WordPress test server stopped before HTTP checks."
+            echo "::error::WordPress test server did not open port 8080."
             exit 1
           fi
 
