@@ -183,10 +183,10 @@ jobs:
           STATUS="$(curl -sS -o /tmp/expedo-invalid-ajax.json -w '%{http_code}' -X POST \
             --data-urlencode 'action=expedo_compare_data' \
             http://127.0.0.1:8080/wp-admin/admin-ajax.php)"
-          echo "Invalid AJAX HTTP status: $STATUS"
-          cat /tmp/expedo-invalid-ajax.json
           php -r '
-            $data = json_decode(file_get_contents("/tmp/expedo-invalid-ajax.json"), true);
+            $body = file_get_contents("/tmp/expedo-invalid-ajax.json");
+            echo "::error::Invalid AJAX diagnostic: HTTP " . $argv[1] . "; body=" . str_replace(["\\r", "\\n"], " ", $body) . "\\n";
+            $data = json_decode($body, true);
             if (!is_array($data) || !empty($data["success"])) {
               fwrite(STDERR, "Empty AJAX request was not rejected.\\n");
               exit(1);
