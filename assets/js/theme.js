@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded',function(){
    const token=++renderToken,ids=getCompare();
    if(!ids.length){compareRoot.innerHTML='<p>Nu ai selectat încă produse. Revino în catalog și apasă „Compară” la produsele dorite.</p>';return}
    if(!window.expedoData||!expedoData.ajaxUrl){compareRoot.textContent='Modulul de comparare nu este inițializat. Reîncarcă pagina.';return}
-   const body=new URLSearchParams({action:'expedo_compare_data',nonce:expedoData.nonce||''});ids.forEach(id=>body.append('ids[]',id));
+   const body=new URLSearchParams({action:'expedo_compare_data'});ids.forEach(id=>body.append('ids[]',id));
    compareRoot.innerHTML='<p>Se încarcă comparația…</p>';
    fetch(expedoData.ajaxUrl,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'},body:body.toString()})
     .then(async response=>{const raw=await response.text();let result;try{result=JSON.parse(raw)}catch(error){throw new Error('Serverul a returnat un răspuns care nu este JSON (HTTP '+response.status+'). Verifică erorile PHP sau regulile de securitate pentru admin-ajax.php.')}if(!response.ok||!result||!result.success){const message=result&&result.data&&result.data.message?result.data.message:'Cererea către server a eșuat (HTTP '+response.status+').';throw new Error(message)}return result})
