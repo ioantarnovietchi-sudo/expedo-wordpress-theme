@@ -1,0 +1,1 @@
+<?php get_header(); ?><main class="site-shell" id="content"><?php while(have_posts()):the_post(); expedo_render_breadcrumb([ ['label'=>get_the_title()] ]); ?><div class="page-heading"><h1><?php the_title();?></h1></div><div class="section"><?php the_content();?></div><?php endwhile;?></main><?php get_footer();?>

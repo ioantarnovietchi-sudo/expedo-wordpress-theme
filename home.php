@@ -1,0 +1,13 @@
+<?php get_header();
+$selected_category=isset($_GET['category_name'])?sanitize_title(wp_unslash($_GET['category_name'])):'';
+$selected_order=isset($_GET['expedo_order'])?sanitize_key(wp_unslash($_GET['expedo_order'])):'newest';
+$categories=get_categories(['taxonomy'=>'category','hide_empty'=>false,'orderby'=>'name','order'=>'ASC','exclude'=>[(int)get_option('default_category')]]);
+$posts_page=get_permalink(get_option('page_for_posts')) ?: home_url('/inspiratii/');
+?>
+<main class="site-shell" id="content">
+<?php expedo_render_breadcrumb([ ['label'=>'Inspirații'] ]); ?>
+<header class="page-heading inspiratii-heading"><div class="eyebrow">EXPEDO · IDEI ȘI INSPIRAȚIE</div><h1>Inspirații</h1><p>Ghiduri, idei de amenajare și informații utile pentru alegerea mobilierului.</p></header>
+<nav class="inspiratii-categories" aria-label="Categorii articole"><a class="<?php echo !$selected_category?'is-active':''; ?>" href="<?php echo esc_url($posts_page); ?>">Toate articolele</a><?php foreach($categories as $category): ?><a class="<?php echo $selected_category===$category->slug?'is-active':''; ?>" href="<?php echo esc_url(add_query_arg(['category_name'=>$category->slug,'expedo_order'=>$selected_order],$posts_page)); ?>"><?php echo esc_html($category->name); ?></a><?php endforeach; ?></nav>
+<form class="inspiratii-toolbar" method="get" action="<?php echo esc_url($posts_page); ?>"><?php if($selected_category): ?><input type="hidden" name="category_name" value="<?php echo esc_attr($selected_category); ?>"><?php endif; ?><label for="expedo-inspiratii-order">Sortează:</label><select id="expedo-inspiratii-order" name="expedo_order" onchange="this.form.submit()"><option value="newest" <?php selected($selected_order,'newest'); ?>>Cele mai noi</option><option value="oldest" <?php selected($selected_order,'oldest'); ?>>Cele mai vechi</option><option value="title_asc" <?php selected($selected_order,'title_asc'); ?>>Titlu A–Z</option><option value="title_desc" <?php selected($selected_order,'title_desc'); ?>>Titlu Z–A</option></select></form>
+<?php if(have_posts()): ?><div class="blog-grid"><?php while(have_posts()):the_post(); ?><article class="blog-card"><a href="<?php the_permalink(); ?>"><?php if(has_post_thumbnail()):the_post_thumbnail('large');endif; ?><h2><?php the_title(); ?></h2></a><p><?php the_excerpt(); ?></p><a href="<?php the_permalink(); ?>">Citește articolul ↗</a></article><?php endwhile; ?></div><?php the_posts_pagination(); ?><?php else: ?><p>Nu există articole în această categorie momentan.</p><?php endif; ?>
+</main><?php get_footer(); ?>
