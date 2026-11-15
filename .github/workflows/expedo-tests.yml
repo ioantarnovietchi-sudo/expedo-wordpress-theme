@@ -158,7 +158,7 @@ jobs:
             exit 1
           fi
 
-          IFS=, read -r ID_A ID_B < /tmp/expedo-product-ids.txt
+          IFS=, read -r ID_A ID_B < /tmp/expedo-product-ids.txt || true
           set +e
           HTTP_STATUS="$(curl --retry 5 --retry-connrefused --retry-delay 1 -sS -o /tmp/expedo-valid-ajax.json -w '%{http_code}' -X POST \
             --data-urlencode 'action=expedo_compare_data' \
