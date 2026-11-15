@@ -155,6 +155,41 @@ jobs:
           echo "WordPress test server did not start." >&2
           exit 1
 
+      - name: Test comparison AJAX over HTTP
+        run: |
+          set -e
+          IFS=, read -r ID_A ID_B < /tmp/expedo-product-ids.txt
+          RESPONSE="$(curl -fsS -X POST \
+            --data-urlencode 'action=expedo_compare_data' \
+            --data-urlencode "ids[]=$ID_A" \
+            --data-urlencode "ids[]=$ID_B" \
+            http://127.0.0.1:8080/wp-admin/admin-ajax.php)"
+          printf '%s' "$RESPONSE" | php -r '
+            $data = json_decode(stream_get_contents(STDIN), true);
+            if (!is_array($data) || empty($data["success"]) || count($data["data"] ?? []) !== 2) {
+              fwrite(STDERR, "Unexpected HTTP AJAX response.\\n");
+              exit(1);
+            }
+            $names = array_column($data["data"], "name");
+            if (!in_array("Produs Test A", $names, true) || !in_array("Produs Test B", $names, true)) {
+              fwrite(STDERR, "HTTP AJAX response contains unexpected products.\\n");
+              exit(1);
+            }
+            echo "PASS: real HTTP AJAX request returns both products.\\n";
+          '
+          STATUS="$(curl -sS -o /tmp/expedo-invalid-ajax.json -w '%{http_code}' -X POST \
+            --data-urlencode 'action=expedo_compare_data' \
+            http://127.0.0.1:8080/wp-admin/admin-ajax.php)"
+          test "$STATUS" = "400"
+          php -r '
+            $data = json_decode(file_get_contents("/tmp/expedo-invalid-ajax.json"), true);
+            if (!is_array($data) || !empty($data["success"])) {
+              fwrite(STDERR, "Empty AJAX request was not rejected.\\n");
+              exit(1);
+            }
+            echo "PASS: empty HTTP AJAX request is rejected with HTTP 400.\\n";
+          '
+
       - name: Test comparison page rendering
         run: |
           PAGE="$(curl -fsS http://127.0.0.1:8080/compara-produse/)"
