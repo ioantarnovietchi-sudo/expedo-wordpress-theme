@@ -91,19 +91,22 @@ jobs:
           PHP
           php wp-cli.phar eval-file /tmp/create-fixtures.php --path=wp --allow-root
 
-      - name: Start WordPress server
-        run: |
-          php -S 127.0.0.1:8080 -t wp > /tmp/expedo-wp.log 2>&1 &
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then exit 0; fi
-            sleep 2
-          done
-          cat /tmp/expedo-wp.log
-          exit 1
-
-      - name: Test comparison AJAX endpoint
+      - name: Test comparison AJAX endpoint and page
         run: |
           set -e
+          # Start the server and run all HTTP checks in the same Actions step.
+          # GitHub Actions terminates background processes when a step ends.
+          php -S 127.0.0.1:8080 -t wp > /tmp/expedo-wp.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then break; fi
+            sleep 1
+          done
+          if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+            cat /tmp/expedo-wp.log
+            exit 1
+          fi
           IFS=',' read -r FIRST SECOND < /tmp/expedo-product-ids.txt
           echo "Fixture product IDs: $FIRST,$SECOND"
           php wp-cli.phar eval 'foreach ([$argv[0],$argv[1]] as $id) { $p=wc_get_product((int)$id); echo "Product ".$id.": ".($p ? $p->get_name()." / status=".$p->get_status()." / visibility=".$p->get_catalog_visibility()." / visible=".($p->is_visible()?"yes":"no") : "NOT FOUND").PHP_EOL; }' "$FIRST" "$SECOND" --path=wp --allow-root
@@ -120,6 +123,9 @@ jobs:
             exit 1
           fi
           node -e 'const raw=process.argv[1]; let r; try { r=JSON.parse(raw); } catch(e) { console.error("AJAX did not return JSON"); process.exit(1); } if(!r.success || !Array.isArray(r.data) || r.data.length!==2) { console.error("Unexpected AJAX payload:",r); process.exit(1); } const names=r.data.map(p=>p.name); if(!names.includes("Produs Test A") || !names.includes("Produs Test B")) { console.error("Unexpected product names:",names); process.exit(1); } console.log("PASS: 2 produse returnate corect fără nonce.")' "$RESPONSE"
+          PAGE="$(curl -fsS http://127.0.0.1:8080/?page_id=$(php wp-cli.phar eval 'echo get_page_by_path("compara-produse")->ID;' --path=wp --allow-root))"
+          echo "$PAGE" | grep -q 'expedo-compare-results'
+          echo "PASS: pagina de comparație conține containerul necesar."
 
       - name: Test comparison page rendering
         run: |
