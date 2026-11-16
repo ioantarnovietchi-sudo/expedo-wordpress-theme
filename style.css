@@ -1,7 +1,7 @@
 /*
 Theme Name: EXPEDO
 Description: Temă editorială minimalistă pentru mobilier și afiliere.
-Version: 1.21.0
+Version: 1.22.0
 Requires at least: 6.4
 Requires PHP: 8.0
 Text Domain: expedo
@@ -494,3 +494,40 @@ body.single-post .section p{font-size:17px;line-height:1.8;margin:0 0 1.25em}
 .single-product-layout .summary{padding-top:8px}
 .single-product-layout .summary h1{font-size:clamp(30px,3vw,44px);margin:0 0 14px}
 @media(max-width:640px){.page-heading{padding:18px 0 10px}.category-heading{padding:14px 0 10px}.single-product-layout{padding-top:22px}.single-product-layout .summary h1{font-size:32px}}
+
+
+/* EXPEDO v1.22.0 — mobile card alignment and refined category labels. */
+/* Keep category labels centered and remove decorative arrow glyphs from the markup. */
+.category-card{text-align:center}
+.category-card h3{
+ display:block;
+ margin:12px 0 0;
+ font:500 17px/1.35 var(--sans);
+ letter-spacing:.01em;
+ text-align:center;
+ color:var(--ink);
+}
+/* Product cards stretch evenly within each grid row; CTAs stay aligned at the bottom. */
+.product-grid{align-items:stretch}
+.product-card{
+ display:flex;
+ flex-direction:column;
+ height:100%;
+ min-width:0;
+}
+.product-card>a:first-child{display:block}
+.product-card .product-title{
+ flex:0 0 auto;
+ overflow-wrap:anywhere;
+}
+.product-card .product-price{margin-top:8px}
+.product-card .expedo-offer-button,
+.product-card .compare-add{
+ margin-top:auto!important;
+ align-self:flex-start;
+}
+@media(max-width:760px){
+ .category-card h3{font-size:16px;line-height:1.35;margin-top:10px}
+ .product-card .expedo-offer-button,
+ .product-card .compare-add{align-self:stretch;justify-content:center}
+}
