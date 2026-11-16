@@ -93,3 +93,10 @@ VERSIUNEA 1.19.0
 - Păstrează titlurile H1, breadcrumb-urile, descrierile și imaginile categoriilor.
 - Reduce spațiul vertical și dimensiunea titlurilor în arhivele de produse și în pagina produsului.
 - Păstrează numărul rezultatelor sub lista produselor în arhiva catalogului și paginile categoriilor.
+
+
+EXPEDO v1.22.0 — prima etapă de rafinare mobilă:
+- Elimină săgețile decorative din denumirile cardurilor de camere/categorii de pe homepage.
+- Centrează denumirile și aplică tipografie sans-serif mai discretă și modernă.
+- Uniformizează înălțimea cardurilor de produse în fiecare rând și aliniază butoanele la bază, fără a elimina titlurile lungi.
+- Modificările sunt aditive; structura și funcționalitățile existente sunt păstrate.
